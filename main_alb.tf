@@ -63,7 +63,7 @@ If you want to provide Internet access to the ec2 instances in the private
 subnet, the NAT gateway should have an elastic ip (static public ip)
 */
   external_nat_ip_ids =  "${aws_eip.nat.*.id}"
-
+  reuse_nat_ips = true
 
   enable_vpn_gateway = false
 
@@ -87,9 +87,8 @@ module "security_group" {
   name        = "alb-sg-${random_pet.this.id}"
   description = "Security group for example usage with ALB"
   vpc_id      = module.vpc.vpc_id
-
   ingress_cidr_blocks = ["0.0.0.0/0"]
-  ingress_rules       = ["http-80-tcp", "all-icmp"]
+  ingress_rules       = ["all-all"]
   egress_rules        = ["all-all"]
 }
 
@@ -104,11 +103,12 @@ module "alb" {
   load_balancer_type = "application"
 
   vpc_id             = module.vpc.vpc_id
-  subnets            = module.vpc.private_subnets
+  subnets            = module.vpc.public_subnets
+  #todo Alan have a separate security group dedicated for load balancers only. Restrict the protocols (http/https) and ports (80/443)
   security_groups    = [module.security_group.security_group_id]
 
 
-
+#todo Alan add support for https
   target_groups = [
     {
       name_prefix      = "pref-"
@@ -145,8 +145,6 @@ module "alb" {
   }
 }
 
-
-
 module "ec2_instance" {
   source  = "terraform-aws-modules/ec2-instance/aws"
   version = "~> 3.0"
@@ -157,8 +155,21 @@ module "ec2_instance" {
   ami                    = "ami-02e136e904f3da870"
   instance_type          = "t2.micro"
   monitoring             = true
+  #todo Alan create a separate security group for ec2 instances. Limit allowed protocols and ports
   vpc_security_group_ids = [module.security_group.security_group_id]
   subnet_id              = "${module.vpc.private_subnets[count.index]}"
+  associate_public_ip_address = true
+  key_name         = "my-ssh-key"
+
+  user_data = <<-EOF
+    #!/bin/bash
+    sudo yum install httpd -y
+    sudo systemctl enable httpd
+    sudo mkdir /var/www/html/
+    sudo chmod 777 /var/www/html/
+    sudo echo "<h1>This is my app</h1>" > /var/www/html/index.html
+    sudo systemctl start httpd
+  EOF
 
   tags = {
     Terraform   = "true"
