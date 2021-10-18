@@ -148,7 +148,6 @@ module "alb" {
 module "ec2_instance" {
   source  = "terraform-aws-modules/ec2-instance/aws"
   version = "~> 3.0"
-
   count = length(module.vpc.private_subnets)
   name = "ec2-${module.vpc.private_subnets[count.index]}"
 
@@ -163,10 +162,10 @@ module "ec2_instance" {
 
   user_data = <<-EOF
     #!/bin/bash
+    set -x
+    sudo rm -rf /var/run/yum.pid
     sudo yum install httpd -y
     sudo systemctl enable httpd
-    sudo mkdir /var/www/html/
-    sudo chmod 777 /var/www/html/
     sudo echo "<h1>This is my app</h1>" > /var/www/html/index.html
     sudo systemctl start httpd
   EOF
@@ -175,4 +174,6 @@ module "ec2_instance" {
     Terraform   = "true"
     Environment = "stage"
   }
+  depends_on = [module.vpc]
+
 }
